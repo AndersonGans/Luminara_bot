@@ -1,10 +1,13 @@
 import os
 from dotenv import load_dotenv
+
+# Сразу загружаем .env, чтобы все os.getenv() работали
+load_dotenv()
+
 from telegram.ext import Application
 from handlers import register_handlers
 
 def main():
-    load_dotenv()
     token = os.getenv("TELEGRAM_TOKEN")
     if not token:
         print("Ошибка: TELEGRAM_TOKEN не задан")
