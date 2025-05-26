@@ -1,45 +1,32 @@
-import os
-from supabase import create_client
-from openai import OpenAI
-from telegram import Update
-from telegram.ext import MessageHandler, filters, ContextTypes
+import re
+from datetime import date
+from telegram.ext import Application, MessageHandler, filters
+from calculator import calculate_numbers
 
-from calculator import calculate_personal_numbers
+# шаблон для даты ДД.MM.ГГГГ
+DATE_PATTERN = re.compile(r'(\d{2})\.(\d{2})\.(\d{4})')
 
-supabase = create_client(
-    os.getenv("SUPABASE_URL"),
-    os.getenv("SUPABASE_KEY")
-)
-openai = OpenAI(api_key=os.getenv("OPENAI_KEY"))
-
-async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    text = update.message.text.strip()
-    try:
-        day, month, year = map(int, text.split('.'))
-    except ValueError:
+async def on_message(update, context):
+    text = update.message.text or ""
+    m = DATE_PATTERN.search(text)
+    if not m:
+        # если это не дата — можно проигнорировать или ответить о формате
         await update.message.reply_text("Введите дату в формате ДД.MM.ГГГГ")
         return
 
-    dob = f"{year:04d}-{month:02d}-{day:02d}"
-#    supabase.table("users").upsert({
-#        "id": user.id,
-#       "username": user.username or "",
-#        "date_of_birth": dob
-#    }).execute()
+    day, month, year = map(int, m.groups())
+    nums = calculate_numbers(day, month, year, ref_date=date.today())
 
-    nums = calculate_personal_numbers(day, month, year)
     reply = (
-        f"Привет, {user.first_name}!\n"
-        f"Число восприятия: {nums['perception']} {nums['perception_symbol']}\n"
-        f"Число личности: {nums['personality']} {nums['personality_symbol']}\n"
-        f"Личный год: {nums['year']} {nums['year_symbol']}\n"
-        f"Личный месяц: {nums['month']} {nums['month_symbol']}\n"
-        f"Личный день: {nums['day']} {nums['day_symbol']}"
+        f"Число восприятия: {nums['perception']}\n"
+        f"Число личности:   {nums['personality']}\n"
+        f"Личный год:        {nums['personal_year']}\n"
+        f"Личный месяц:     {nums['personal_month']}\n"
+        f"Личный день:       {nums['personal_day']}"
     )
     await update.message.reply_text(reply)
 
-def register_handlers(app):
+def register_handlers(app: Application):
     app.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, on_message)
     )
