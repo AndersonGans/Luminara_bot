@@ -22,11 +22,11 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     dob = f"{year:04d}-{month:02d}-{day:02d}"
-    supabase.table("users").upsert({
-        "id": user.id,
-        "username": user.username or "",
-        "date_of_birth": dob
-    }).execute()
+#    supabase.table("users").upsert({
+#        "id": user.id,
+#       "username": user.username or "",
+#        "date_of_birth": dob
+#    }).execute()
 
     nums = calculate_personal_numbers(day, month, year)
     reply = (
