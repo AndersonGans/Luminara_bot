@@ -28,11 +28,10 @@ from telegram.ext import Application
 from handlers import register_handlers
 
 def main():
-    # Строим приложение и передаем туда клиент_oa, ASSISTANT_ID через context.bot_data
+    # Строим приложение и передаем туда client_oa и ASSISTANT_ID через bot_data
     app = Application.builder().token(TELEGRAM_TOKEN).build()
-    # кладем OpenAI-клиент и ID ассистента в bot_data, чтобы хендлеры их достали
-    app.bot_data["OPENAI_CLIENT"]  = client_oa
-    app.bot_data["ASSISTANT_ID"]   = ASSISTANT_ID
+    app.bot_data["OPENAI_CLIENT"] = client_oa
+    app.bot_data["ASSISTANT_ID"]  = ASSISTANT_ID
 
     register_handlers(app)
 
