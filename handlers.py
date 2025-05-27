@@ -1,56 +1,33 @@
 # handlers.py
-import re
+import os
 from telegram import Update
-from telegram.ext import ContextTypes, MessageHandler, filters, Application
+from telegram.ext import ContextTypes, CommandHandler, MessageHandler, filters
 
-from calculator import calculate_personal_numbers  # ваш калькулятор
+from calculator import calculate_personal_numbers  # <-- вот эта функция теперь есть!
 
-def register_handlers(app: Application):
-    # перехватываем любые текстовые сообщения (не команды)
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_message))
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Привет! Введите дату в формате ДД.MM.ГГГГ")
 
 async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
+    # простая проверка формата ДД.MM.ГГГГ
+    try:
+        d, m, y = map(int, text.split("."))
+    except:
+        return await update.message.reply_text("Неверный формат, попробуйте ДД.MM.ГГГГ")
 
-    # 1) попробуем распарсить дату в формате ДД.ММ.ГГГГ
-    m = re.match(r"^(\d{2})\.(\d{2})\.(\d{4})$", text)
-    if not m:
-        # если не дата — просто отвечаем шаблонно
-        return await update.message.reply_text("Введите дату рождения в формате ДД.ММ.ГГГГ")
-    
-    day, month, year = map(int, m.groups())
+    nums = calculate_personal_numbers(d, m, y)
 
-    # 2) считаем все необходимые числа
-    nums = calculate_personal_numbers(day, month, year)
-    # nums будет dict вида:
-    # { "year": 9, "month": 5, "day": 4, "personal": 5, "perception": 7, ... }
-
-    # 3) подготавливаем prompt для GPT-ассистента
-    prompt = (
-        f"Пользователь родился {day:02d}.{month:02d}.{year}. "
-        f"Рассчитанные показатели: "
-        f"Личный год = {nums['year']}, "
-        f"Личный месяц = {nums['month']}, "
-        f"Личный день = {nums['day']}, "
-        f"Число личности = {nums['personal']}, "
-        f"Число восприятия = {nums['perception']}. "
-        "Дайте подробную нумерологическую трактовку каждого из этих чисел."
+    resp = (
+        f"Привет, {update.effective_user.first_name}!\n"
+        f"Число восприятия: {nums['perception']} {nums['perception_symbol']}\n"
+        f"Число личности: {nums['personality']} {nums['personality_symbol']}\n"
+        f"Личный год: {nums['year']} {nums['year_symbol']}\n"
+        f"Личный месяц: {nums['month']} {nums['month_symbol']}\n"
+        f"Личный день: {nums['day']} {nums['day_symbol']}"
     )
+    await update.message.reply_text(resp)
 
-    # 4) берём из bot_data OpenAI-клиент и ID ассистента
-    client_oa    = context.bot_data["OPENAI_CLIENT"]
-    assistant_id = context.bot_data["ASSISTANT_ID"]
-
-    # 5) отправляем запрос в OpenAI
-    resp = client_oa.chat.completions.create(
-        assistant=assistant_id,
-        messages=[
-            {"role": "system", "content": "Ты — нумеролог-ассистент, даёшь развёрнутые толкования."},
-            {"role": "user",   "content": prompt}
-        ]
-    )
-
-    answer = resp.choices[0].message.content
-
-    # 6) шлём результат пользователю
-    await update.message.reply_text(answer)
+def register_handlers(app):
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_message))
