@@ -9,15 +9,12 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENAI_KEY     = os.getenv("OPENAI_KEY")
 ASSISTANT_ID   = os.getenv("ASSISTANT_ID")
 
-if not TELEGRAM_TOKEN:
-    print("Ошибка: TELEGRAM_TOKEN не задан")
-    exit(1)
-if not OPENAI_KEY:
-    print("Ошибка: OPENAI_KEY не задан")
-    exit(1)
-if not ASSISTANT_ID:
-    print("Ошибка: ASSISTANT_ID не задан")
-    exit(1)
+for name, val in (("TELEGRAM_TOKEN", TELEGRAM_TOKEN),
+                  ("OPENAI_KEY", OPENAI_KEY),
+                  ("ASSISTANT_ID", ASSISTANT_ID)):
+    if not val:
+        print(f"Ошибка: {name} не задан")
+        exit(1)
 
 # 3) Инициализируем OpenAI-клиент
 from openai import OpenAI
@@ -28,15 +25,19 @@ from telegram.ext import Application
 from handlers import register_handlers
 
 def main():
-    # Строим приложение и передаем туда client_oa и ASSISTANT_ID через bot_data
+    # строим приложение
     app = Application.builder().token(TELEGRAM_TOKEN).build()
+
+    # сохраняем OpenAI-клиент и ID ассистента в bot_data
     app.bot_data["OPENAI_CLIENT"] = client_oa
     app.bot_data["ASSISTANT_ID"]  = ASSISTANT_ID
 
     register_handlers(app)
 
     print("🤖 Бот запущен и слушает сообщения...")
-    app.run_polling()
+
+    # Сбрасываем все webhook и дропаем старые getUpdates, чтобы не было конфликтов
+    app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
     main()
