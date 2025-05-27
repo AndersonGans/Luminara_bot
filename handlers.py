@@ -1,61 +1,57 @@
 # handlers.py
-
-import re
+import os
 from telegram import Update
-from telegram.ext import ContextTypes, MessageHandler, filters, CommandHandler, Application
-from calculator import calculate_personal_numbers
+from telegram.ext import ContextTypes, CommandHandler, MessageHandler, filters
 
-# Регулярка для даты в формате ДД.ММ.ГГГГ
-DATE_RE = re.compile(r"^(\d{2})\.(\d{2})\.(\d{4})$")
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "Привет! Я нумерологический бот.\n"
-        "Отправь мне дату рождения в формате ДД.MM.ГГГГ — и я дам тебе прогноз."
-    )
+from calculator import calculate_personal_numbers  # ваш расчёт
+from supabase import create_client  # если вы сохраняете данные
+from psycopg import sql  # или используете pydantic/postgrest — как у вас устроено
 
 async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
-    m = DATE_RE.match(text)
-    if not m:
-        return  # не дата — игнорим
 
-    day, month, year = map(int, m.groups())
+    # 1) Парсим дату ДД.ММ.ГГГГ
+    try:
+        day, month, year = map(int, text.split('.'))
+    except ValueError:
+        return await update.message.reply_text("Введите дату в формате ДД.MM.ГГГГ")
+
+    # 2) Считаем все нумерологические числа
     nums = calculate_personal_numbers(day, month, year)
+    # nums = {
+    #   "year": 9, "month": 5, "day": 4,
+    #   "personal": 5, "perception": 7
+    # }
 
-    # Формируем текст для ассистента
-    calc_text = (
-        f"Личный год: {nums['year']}\n"
-        f"Личный месяц: {nums['month']}\n"
-        f"Личный день: {nums['day']}\n"
-        f"Число личности: {nums['personality']}\n"
-        f"Число восприятия: {nums['perception']}"
+    # 3) Формируем промт для ассистента
+    prompt = (
+        f"Пользователь родился {text}. "
+        f"Рассчитаны нумерологические числа:\n"
+        f"- Личный год: {nums['year']}\n"
+        f"- Личный месяц: {nums['month']}\n"
+        f"- Личный день: {nums['day']}\n"
+        f"- Число личности: {nums['personal']}\n"
+        f"- Число восприятия: {nums['perception']}\n\n"
+        "Пожалуйста, дай нумерологический прогноз и разбор этих цифр "
+        "в формате дружелюбного сообщения пользователю."
     )
-    user_prompt = (
-        f"Пользователь родился {day:02d}.{month:02d}.{year}.\n"
-        f"Мы рассчитали следующие показатели:\n{calc_text}\n\n"
-        "Дай развёрнутое нумерологическое толкование каждого пункта."
-    )
 
-    # Достаём OpenAI-клиент и ID ассистента из bot_data
-    client_oa   = context.bot_data["OPENAI_CLIENT"]
-    assistant   = context.bot_data["ASSISTANT_ID"]
+    # 4) Вызываем вашего ассистента
+    client_oa: "OpenAI" = context.bot_data["OPENAI_CLIENT"]
+    assistant_id: str = context.bot_data["ASSISTANT_ID"]
 
-    # Запрашиваем прогноз у вашего ассистента
     resp = await client_oa.chat.completions.create(
         model="gpt-4o-mini",
-        assistant=assistant,
+        assistant=assistant_id,
         messages=[
-            {"role": "system", "content": "Ты — нумеролог-ассистент, даёшь осмысленные прогнозы."},
-            {"role": "user",   "content": user_prompt}
+            {"role": "user", "content": prompt}
         ]
     )
+    reply = resp.choices[0].message.content
 
-    answer = resp.choices[0].message.content
-    await update.message.reply_text(answer)
+    # 5) Отправляем ответ пользователю
+    await update.message.reply_text(reply)
 
-def register_handlers(app: Application):
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(
-        MessageHandler(filters.TEXT & ~filters.COMMAND, on_message)
-    )
+def register_handlers(app):
+    # Убираем все старые обработчики, ставим один общий
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_message))
