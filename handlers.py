@@ -1,12 +1,11 @@
+# handlers.py
 import os
 from telegram import Update
 from telegram.ext import ContextTypes, MessageHandler, filters
-
-# Предполагается, что calculate_personal_numbers возвращает dict с числами
 from calculator import calculate_personal_numbers
 
 def register_handlers(app):
-    # ловим любые текстовые сообщения
+    # Ловим любые текстовые сообщения (не команды)
     app.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, on_message)
     )
@@ -14,48 +13,49 @@ def register_handlers(app):
 async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
 
-    # если не дата — можно сразу выходить или приветствовать
+    # Проверяем — это ли дата?
     if not is_date(text):
         await update.message.reply_text("Введите дату в формате ДД.MM.ГГГГ")
         return
 
+    # Парсим дату
     day, month, year = map(int, text.split('.'))
     nums = calculate_personal_numbers(day, month, year)
 
-    # готовим контекст для ассистента
-    user_id = update.effective_user.id
-    # формируем системную часть, чтобы ассистент знал, что делать
+    # Формируем системный промпт для ассистента
     system_prompt = (
-        "Ты нумерологический ассистент. "
-        "Твоя задача: на основе чисел дать подробный нумерологический прогноз.\n\n"
-        f"Пользователь: {user_id}\n"
+        "Ты — нумерологический ассистент. "
+        "Твоя задача — на основе переданных чисел составить подробный нумерологический прогноз.\n\n"
         f"Личный год: {nums['year']} ({nums['year_symbol']})\n"
         f"Личный месяц: {nums['month']} ({nums['month_symbol']})\n"
         f"Личный день: {nums['day']} ({nums['day_symbol']})\n"
         f"Число личности: {nums['personal']} ({nums['personal_symbol']})\n"
         f"Число восприятия: {nums['perception']} ({nums['perception_symbol']})\n\n"
-        "Сделай Пользователю полный нумерологический прогноз на основе этих данных."
+        "Дай развёрнутый и понятный прогноз, объяснив каждое из этих чисел."
     )
 
-    # достаём OpenAI клиента и ID ассистента
-    client_oa: "OpenAI" = context.bot_data["OPENAI_CLIENT"]
-    assistant_id: str      = context.bot_data["ASSISTANT_ID"]
+    # Небольшой «тайпинг…» в чате
+    await update.message.chat_action("typing")
 
-    # отправляем запрос в Assistants API
+    # Достаём OpenAI-клиент и ID ассистента
+    client_oa   = context.bot_data["OPENAI_CLIENT"]
+    assistant_id = context.bot_data["ASSISTANT_ID"]
+
+    # Отправляем сообщение в Assistants API
     resp = await client_oa.assistants.chat.completions.create(
         assistant=assistant_id,
+        thread_id = context.chat_data.get("thread_id"),
         messages=[
-            {"role": "system",  "content": system_prompt},
-            {"role": "user",    "content": "Что скажешь?"}
+            {"role": "system", "content": system_prompt},
+            {"role": "user",   "content": "Пожалуйста, сделай прогноз на основе этих данных."},
         ]
     )
+    # Сохраняем thread_id, чтобы продолжать тот же тред
+    context.chat_data["thread_id"] = resp.thread_id
 
-    # извлекаем ответ ассистента
+    # Отправляем ответ ассистента пользователю
     assistant_msg = resp.choices[0].message.content
-
-    # отправляем пользователю
     await update.message.reply_text(assistant_msg)
-
 
 def is_date(s: str) -> bool:
     parts = s.split('.')
