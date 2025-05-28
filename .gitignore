@@ -1,6 +1,20 @@
-venv/
+# Python
 __pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+env/
 venv/
-__pycache__/
-venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Project files
 .env
+*.sqlite3
+
+# Editor
+*.swp
+*.swo
+.idea/
+.vscode/
