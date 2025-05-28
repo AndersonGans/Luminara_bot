@@ -8,9 +8,7 @@ app = FastAPI()
 @app.post("/webhook")
 async def webhook(req: Request):
     data = await req.json()
-    result = await handle_update(data)
-    # возвращаем словарь {"chat_id":..., "text":...}
-    return result
+    return await handle_update(data)
 
 if __name__ == "__main__":
     import uvicorn
