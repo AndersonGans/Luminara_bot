@@ -3,8 +3,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 load_dotenv()
-OPENAI_KEY   = os.getenv("OPENAI_KEY")
-ASSISTANT_ID = os.getenv("ASSISTANT_ID")
+OPENAI_KEY = os.getenv("OPENAI_KEY")
 
 client = OpenAI(api_key=OPENAI_KEY)
 
@@ -21,7 +20,6 @@ def get_forecast(данные: dict) -> str:
         {"role": "user",   "content": f"Расчёты:\n{данные}"}
     ]
     resp = client.chat.completions.create(
-        assistant=ASSISTANT_ID,
         model="gpt-3.5-turbo",
         messages=messages
     )
