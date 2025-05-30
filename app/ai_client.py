@@ -1,47 +1,44 @@
 # app/ai_client.py
-
 import os
-from dotenv import load_dotenv
 from openai import OpenAI
+from typing import Dict
 
-# 1. Загружаем переменные из .env
-load_dotenv()
-
-# 2. Читаем ключ и ID ассистента
-OPENAI_KEY   = os.getenv("OPENAI_KEY")    # должен быть sk-proj-…
-ASSISTANT_ID = os.getenv("ASSISTANT_ID")  # asst_…
-
-# 3. Ваша системная инструкция для ассистента
-SYSTEM_PROMPT = (
-    "Ты — ассистент Наука Luminara, эксперт в нумерологии. "
-    "У тебя есть база знаний по системе Luminara. "
-    "Отвечай с лёгкой иронией, не показывай расчёты, "
-    "давай только готовый прогноз."
+# Инициализируем клиент
+client = OpenAI(
+    api_key=os.getenv("OPENAI_KEY"),     # ваш sk-ключ
+    # Если у вас есть приватная инстанс-модель (Assistant), 
+    # вместо model= передавайте assistant=os.getenv("ASSISTANT_ID")
 )
 
-# 4. Инициализируем OpenAI-клиент
-client = OpenAI(api_key=OPENAI_KEY)
-
-def get_forecast(numbers: dict) -> str:
+def get_forecast(numbers: Dict[str,int]) -> str:
     """
-    Формирует запрос в Assistants API и возвращает текст прогноза.
-    
-    Параметр:
-      numbers — словарь с вашими расчётами.
-    
-    Возвращает:
-      string — содержимое первого сообщения ассистента.
+    Делает запрос к OpenAI ChatCompletion и возвращает прогноз.
+    ВАЖНО: здесь передаются оба обязательных аргумента — model (или assistant) и messages.
     """
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user",   "content": f"Расчёты: {numbers}"}
-    ]
+    # 1) Формируем цепочку сообщений согласно вашему системному промпту
+    system_msg = {
+        "role": "system",
+        "content": (
+            "Ты — цифровой нумеролог-консультант школы Люминары по имени Василиса. "
+            "Используй трёхуровневую систему расчёта личного дня."
+        ),
+    }
+    # 2) Пользовательский запрос с числами
+    user_msg = {
+        "role": "user",
+        "content": f"Мои персональные числа: день={numbers['day']}, "
+                   f"месяц={numbers['month']}, год={numbers['year']}. "
+                   "Дай краткий прогноз на сегодня.",
+    }
 
-    # Вызов Assistants API (не model=…, а assistant=…)
+    # 3) Запускаем ChatCompletion
     resp = client.chat.completions.create(
-        assistant=ASSISTANT_ID,
-        messages=messages
+        # Если вы хотите использовать стандартную модель:
+        model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+        # — или, если вы хотите использовать ваш Assistant из UI:
+        # assistant=os.getenv("ASSISTANT_ID"),
+        messages=[system_msg, user_msg],
     )
 
-    # Извлекаем и возвращаем чистый текст ответа
-    return resp.choices[0].message.content.strip()
+    # 4) Достаём текст ответа
+    return resp.choices[0].message.content
