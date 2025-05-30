@@ -1,8 +1,8 @@
 # app/handlers.py
 
 from app.calculator import calc_personal_numbers
-from app.ai_client    import get_forecast
-from app.db           import save_message
+from app.ai_client   import get_forecast
+from app.db          import save_message
 
 async def handle_update(data: dict) -> dict:
     """
@@ -25,8 +25,8 @@ async def handle_update(data: dict) -> dict:
     # 3) Получаем текст прогноза
     forecast = get_forecast(numbers)
 
-    # 4) Сохраняем ответ ассистента
-    save_message(user_id, "assistant", forecast)
+    # 4) Сохраняем ответ бота
+    save_message(user_id, "bot", forecast)
 
     # 5) Отдаём готовый ответ Telegram API
     return {"chat_id": user_id, "text": forecast}
