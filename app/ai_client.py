@@ -1,26 +1,29 @@
+# app/ai_client.py
+
 import os
-from dotenv import load_dotenv
 from openai import OpenAI
 
-load_dotenv()
-OPENAI_KEY = os.getenv("OPENAI_KEY")
-
-client = OpenAI(api_key=OPENAI_KEY)
-
-SYSTEM_PROMPT = (
-    "Ты — ассистент Наука Luminara, эксперт в нумерологии. "
-    "У тебя есть база знаний по системе Luminara. "
-    "Отвечай с лёгкой иронией, не показывай расчёты, "
-    "давай только готовый прогноз."
+# Инициализируем клиента с ключом типа sk-proj-…
+client = OpenAI(
+    api_key=os.getenv("OPENAI_KEY"),  # ваш project key
 )
 
-def get_forecast(данные: dict) -> str:
+def get_forecast(numbers: dict) -> str:
+    """
+    Запрашивает прогноз у вашего ассистента.
+    Вместо model=... передаём assistant=...
+    """
+    # Собираем историю сообщений, в т.ч. системную инструкцию
     messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user",   "content": f"Расчёты:\n{данные}"}
+        {"role": "system", "content": os.getenv("SYSTEM_PROMPT", "")},
+        {"role": "user",   "content": f"Личные числа: {numbers}. Дай прогноз на сегодня."},
     ]
+
+    # Выполняем вызов Assistants API
     resp = client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=messages
+        assistant=os.getenv("ASSISTANT_ID"),  # asst_9YDXc…
+        messages=messages,
     )
-    return resp.choices[0].message.content.strip()
+
+    # Извлекаем и возвращаем текст ответа
+return resp.choices[0].message.content
