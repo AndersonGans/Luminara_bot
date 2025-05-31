@@ -1,34 +1,84 @@
-# app/ai_client.py
-
 import os
+import logging
 from dotenv import load_dotenv
-from openai import OpenAI
+from openai import OpenAI, OpenAIError
 from typing import Dict
 
-# подгружаем .env
+# ──────────────────────────────────────────────────────────────────────────────
+# 1. Загружаем переменные из .env
+# ──────────────────────────────────────────────────────────────────────────────
 load_dotenv()
 
-# инициализируем клиент
-client = OpenAI(api_key=os.getenv("OPENAI_KEY"))
+OPENAI_KEY   = os.getenv("OPENAI_KEY")      # должен быть вида "sk-proj-..."
+ASSISTANT_ID = os.getenv("ASSISTANT_ID")    # должен быть вида "asst_…"
 
-# ваш системный промпт
+if not OPENAI_KEY:
+    raise RuntimeError("Не найдена переменная OPENAI_KEY в окружении.")
+
+if not ASSISTANT_ID:
+    raise RuntimeError("Не найдена переменная ASSISTANT_ID в окружении.")
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 2. Инициализируем OpenAI-клиент (Python-SDK)
+# ──────────────────────────────────────────────────────────────────────────────
+client = OpenAI(api_key=OPENAI_KEY)
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 3. Ваш системный промпт (его можно менять по желанию)
+# ──────────────────────────────────────────────────────────────────────────────
 SYSTEM_PROMPT = (
     "Ты — цифровой нумеролог-консультант школы Люминары по имени Василиса. "
-    "Используй трёхуровневую систему расчёта личного дня."
+    "Используй трёхуровневую систему расчёта личного дня, не показывай подробных "
+    "вычислений, а сразу выдавай готовый прогноз с лёгкой иронией."
 )
 
-def get_forecast(numbers: Dict[str,int]) -> str:
-    # 1) формируем сообщения
+# ──────────────────────────────────────────────────────────────────────────────
+# 4. Функция для получения прогноза от ассистента
+# ──────────────────────────────────────────────────────────────────────────────
+def get_forecast(numbers: Dict[str, int]) -> str:
+    """
+    Формирует запрос к вашему кастомному ассистенту (Assistants API)
+    и возвращает текст прогноза. Если что-то идёт не так, вернёт понятный текст ошибки.
+
+    Параметр:
+        numbers – словарь вида {
+            "личный_год": int,
+            "личный_месяц": int,
+            "личный_день": int,
+            "число_личности": int,
+            "число_восприятия": int
+        }
+
+    Возвращает:
+        Строку с готовым прогнозом или сообщение о внутренней ошибке.
+    """
+    # 4.1. Формируем список сообщений для ассистента
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user",   "content": f"Расчёты: {numbers}"}
     ]
 
-    # 2) вызываем ChatCompletion с обязательными аргументами
-    resp = client.chat.completions.create(
-        model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),  # модель по-умолчанию
-        messages=messages,
-    )
+    try:
+        # 4.2. Вызываем Assistants API (через Python-SDK)
+        resp = client.chat.completions.create(
+            assistant=ASSISTANT_ID,  # вместо model=… используем свой ассистент
+            messages=messages
+        )
+    except OpenAIError as e:
+        # OpenAIError ловит все ошибки, которые бросает SDK (AuthenticationError, InvalidRequestError и пр.)
+        logging.error(f"Ошибка при обращении к OpenAI Assistants API: {e!r}")
+        return "❗ Извините, сейчас не могу получить прогноз (ошибка OpenAI). Повторите, пожалуйста, чуть позже."
+    except Exception as e:
+        # На всякий случай «поймаем» любые другие исключения
+        logging.exception("Непредвиденная ошибка в get_forecast:")
+        return "❗ Произошла внутренняя ошибка при формировании прогноза. Попробуйте ещё раз."
 
-    # 3) возвращаем текст прогноза
-    return resp.choices[0].message.content.strip()
+    # 4.3. Извлекаем текст из ответа и возвращаем
+    try:
+        # Убедимся, что есть хотя бы один выбор (choices[0])
+        choice = resp.choices[0]
+        content: str = choice.message.content.strip()
+        return content
+    except Exception as e:
+        logging.exception(f"Не удалось извлечь текст из ответа OpenAI: {e!r} / ответ: {resp!r}")
+        return "❗ Неверный формат ответа от OpenAI. Повторите запрос позже."
