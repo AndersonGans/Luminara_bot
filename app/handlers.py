@@ -19,12 +19,17 @@ async def handle_update(data: dict) -> dict:
       4) Сохраняет ответ бота в Supabase
       5) Возвращает dict с полями chat_id и text
     """
-    # 1) Извлекаем ID и текст
-    user_id = str(data.get("user", {}).get("id", ""))   # безопасный геттер
-    text    = data.get("message", {}).get("text", "")
+    # 1) Извлекаем chat_id и текст из корректных полей Telegram
+    message = data.get("message")
+    if not message:
+        logging.warning(f"handle_update: неверный формат data из Telegram: {data!r}")
+        return {"chat_id": "UNKNOWN", "text": "❗ Я получил странные данные от Telegram. Попробуйте ещё раз."}
 
-    # Если не удалось получить chat_id или text, логируем и возвращаем «400»: 
-    # но поскольку FastAPI ожидает dict, мы просто вернём текст об ошибке.
+    chat = message.get("chat", {})
+    user_id = str(chat.get("id", ""))   # chat.id — это либо private chat, либо групповой чат
+    text    = message.get("text", "")
+
+    # Если не удалось получить chat_id или text, возвращаем понятную ошибку
     if not user_id or not text:
         logging.warning(f"handle_update: неверный формат data из Telegram: {data!r}")
         return {"chat_id": user_id or "UNKNOWN", "text": "❗ Я получил странные данные от Telegram. Попробуйте ещё раз."}
@@ -34,14 +39,12 @@ async def handle_update(data: dict) -> dict:
         save_message(user_id, "user", text)
     except Exception as e:
         logging.exception(f"Не удалось сохранить входящее сообщение (user) для {user_id}: {e!r}")
-        # но мы всё равно идем дальше: даже если не сохранили, попытаемся обработать
-        pass
+        # продолжаем: даже если не сохранили, попытаемся обработать
 
     # 3) Пытаемся распарсить строку как дату “DD.MM.YYYY” и посчитать личные числа
     try:
         numbers = calc_personal_numbers(text)
     except ValueError:
-        # Если формат не DD.MM.YYYY, возвращаем понятное сообщение и не отправляем в OpenAI
         return {
             "chat_id": user_id,
             "text": "❗ Неверный формат даты. Пожалуйста, отправьте дату в формате DD.MM.YYYY (например, 16.02.1987)."
@@ -57,7 +60,6 @@ async def handle_update(data: dict) -> dict:
     try:
         forecast = get_forecast(numbers)
     except Exception as e:
-        # Теоретически get_forecast уже обрабатывает свои ошибки, но на всякий случай:
         logging.exception(f"Ошибка в get_forecast для пользователя {user_id}, numbers={numbers}: {e!r}")
         forecast = "❗ Не удалось сформировать прогноз. Попробуйте чуть позже."
 
