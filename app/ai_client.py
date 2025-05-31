@@ -9,12 +9,11 @@ from typing import Dict
 # ──────────────────────────────────────────────────────────────────────────────
 load_dotenv()
 
-OPENAI_KEY   = os.getenv("OPENAI_KEY")      # должен быть вида "sk-proj-..."
-ASSISTANT_ID = os.getenv("ASSISTANT_ID")    # должен быть вида "asst_…"
+OPENAI_KEY   = os.getenv("OPENAI_KEY")     # должен быть sk-proj-...
+ASSISTANT_ID = os.getenv("ASSISTANT_ID")   # должен быть вида asst_...
 
 if not OPENAI_KEY:
     raise RuntimeError("Не найдена переменная OPENAI_KEY в окружении.")
-
 if not ASSISTANT_ID:
     raise RuntimeError("Не найдена переменная ASSISTANT_ID в окружении.")
 
@@ -24,61 +23,42 @@ if not ASSISTANT_ID:
 client = OpenAI(api_key=OPENAI_KEY)
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 3. Ваш системный промпт (его можно менять по желанию)
+# 3. Системный промпт
 # ──────────────────────────────────────────────────────────────────────────────
 SYSTEM_PROMPT = (
     "Ты — цифровой нумеролог-консультант школы Люминары по имени Василиса. "
     "Используй трёхуровневую систему расчёта личного дня, не показывай подробных "
-    "вычислений, а сразу выдавай готовый прогноз с лёгкой иронией."
+    "вычислений, сразу выдавай готовый прогноз с лёгкой иронией."
 )
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 4. Функция для получения прогноза от ассистента
+# 4. Функция для получения прогноза
 # ──────────────────────────────────────────────────────────────────────────────
 def get_forecast(numbers: Dict[str, int]) -> str:
     """
-    Формирует запрос к вашему кастомному ассистенту (Assistants API)
-    и возвращает текст прогноза. Если что-то идёт не так, вернёт понятный текст ошибки.
-
-    Параметр:
-        numbers – словарь вида {
-            "личный_год": int,
-            "личный_месяц": int,
-            "личный_день": int,
-            "число_личности": int,
-            "число_восприятия": int
-        }
-
-    Возвращает:
-        Строку с готовым прогнозом или сообщение о внутренней ошибке.
+    Формирует запрос к кастомному ассистенту (Assistants API)
+    и возвращает текст прогноза. При ошибке возвращает понятное сообщение.
     """
-    # 4.1. Формируем список сообщений для ассистента
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user",   "content": f"Расчёты: {numbers}"}
     ]
 
     try:
-        # 4.2. Вызываем Assistants API (через Python-SDK)
+        # ВАЖНО: передаём assistant=ASSISTANT_ID, а не model=…
         resp = client.chat.completions.create(
-            assistant=ASSISTANT_ID,  # вместо model=… используем свой ассистент
+            assistant=ASSISTANT_ID,
             messages=messages
         )
     except OpenAIError as e:
-        # OpenAIError ловит все ошибки, которые бросает SDK (AuthenticationError, InvalidRequestError и пр.)
         logging.error(f"Ошибка при обращении к OpenAI Assistants API: {e!r}")
-        return "❗ Извините, сейчас не могу получить прогноз (ошибка OpenAI). Повторите, пожалуйста, чуть позже."
+        return "❗ Извините, сейчас не могу получить прогноз (ошибка OpenAI). Повторите позже."
     except Exception as e:
-        # На всякий случай «поймаем» любые другие исключения
         logging.exception("Непредвиденная ошибка в get_forecast:")
         return "❗ Произошла внутренняя ошибка при формировании прогноза. Попробуйте ещё раз."
 
-    # 4.3. Извлекаем текст из ответа и возвращаем
     try:
-        # Убедимся, что есть хотя бы один выбор (choices[0])
-        choice = resp.choices[0]
-        content: str = choice.message.content.strip()
-        return content
+        return resp.choices[0].message.content.strip()
     except Exception as e:
-        logging.exception(f"Не удалось извлечь текст из ответа OpenAI: {e!r} / ответ: {resp!r}")
-        return "❗ Неверный формат ответа от OpenAI. Повторите запрос позже."
+        logging.exception(f"Не удалось извлечь содержимое ответа OpenAI: {e!r} / ответ: {resp!r}")
+        return "❗ Неверный формат ответа от OpenAI. Повторите позже."
